@@ -1,0 +1,3 @@
+# path	before-sha256	after-sha256	template
+m3/stream-interop/src/main/java/com/synexia/m3/spring/M3SpringStreams.java	ABSENT	9a392f8ee7250ecd99ddd388d166e3ea9c46707813a387a63ed06160e5b434d7	M3SpringStreams.java.txt
+m3/stream-interop/src/test/java/com/synexia/m3/spring/M3SpringStreamsTest.java	ABSENT	30a97346d0975f1681bd5dae05c1b4b4ecd8b74dfe4a0f315be8059dae8eb7c9	M3SpringStreamsTest.java.txt
