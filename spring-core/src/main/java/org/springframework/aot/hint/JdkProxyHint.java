@@ -17,8 +17,8 @@
 package org.springframework.aot.hint;
 
 import java.lang.reflect.Proxy;
+import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Objects;
 
@@ -29,6 +29,7 @@ import org.jspecify.annotations.Nullable;
  *
  * @author Stephane Nicoll
  * @author Brian Clozel
+ * @author Hitesh Soliwal and Contributors to the Synexia Project
  * @since 6.0
  */
 public final class JdkProxyHint implements ConditionalHint {
@@ -106,14 +107,14 @@ public final class JdkProxyHint implements ConditionalHint {
 	 */
 	public static class Builder {
 
-		private final LinkedList<TypeReference> proxiedInterfaces;
+		private final List<TypeReference> proxiedInterfaces;
 
 		private @Nullable TypeReference reachableType;
 
 		private boolean javaSerialization;
 
 		Builder() {
-			this.proxiedInterfaces = new LinkedList<>();
+			this.proxiedInterfaces = new ArrayList<>();
 		}
 
 		/**

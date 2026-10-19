@@ -1,0 +1,69 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2026 Hitesh Soliwal and Contributors to the Synexia Project
+import com.m3.collections.M3LinkedHashMap;
+import java.io.*;
+import java.util.*;
+import java.util.function.Supplier;
+import org.springframework.util.MultiValueMapAdapter;
+
+/** Executable refusal evidence against the unchanged donor; not a target implementation. */
+public final class DonorCompatibilityCounterexamples {
+  public static void main(String[] args) throws Exception {
+    compare("adapter_serialization", () -> serialized(false), () -> serialized(true));
+    compare("adapter_iterator_hasNext_after_put", () -> hasNext(false), () -> hasNext(true));
+    compare("adapter_forEach_append_callback", () -> forEach(false), () -> forEach(true));
+    compare("adapter_detached_entry", () -> detached(false), () -> detached(true));
+    compare("empty_adapter_hash_callback", () -> emptyHash(false), () -> emptyHash(true));
+    compare("donor_replaceAll_append_callback", () -> replaceAll(false), () -> replaceAll(true));
+  }
+  static Map<String,List<Integer>> backing(boolean donor) {
+    return donor ? new M3LinkedHashMap<>() : new LinkedHashMap<>();
+  }
+  static MultiValueMapAdapter<String,Integer> adapter(boolean donor) {
+    var map = new MultiValueMapAdapter<String,Integer>(backing(donor));
+    map.add("a",1); map.add("b",2); return map;
+  }
+  static String serialized(boolean donor) {
+    try {
+      var bytes = new ByteArrayOutputStream();
+      try(var stream = new ObjectOutputStream(bytes)) { stream.writeObject(adapter(donor)); }
+      try(var stream = new ObjectInputStream(new ByteArrayInputStream(bytes.toByteArray()))) {
+        return "roundtrip=" + stream.readObject();
+      }
+    } catch(Exception error) { return error.getClass().getName() + ":" + error.getMessage(); }
+  }
+  static String hasNext(boolean donor) {
+    var map = adapter(donor); var iterator = map.keySet().iterator(); map.add("c",3);
+    return outcome(iterator::hasNext);
+  }
+  static String forEach(boolean donor) {
+    var map = adapter(donor); List<String> trace = new ArrayList<>();
+    String result = outcome(() -> { map.forEach((key,value) -> { trace.add(key); if(key.equals("a")) map.add("c",3); }); return null; });
+    return result + ";callbacks=" + trace + ";state=" + map;
+  }
+  static String detached(boolean donor) {
+    var map=adapter(donor); var saved=map.entrySet().iterator().next(); map.remove("a");
+    return "saved=" + saved.getValue() + ";set=" + outcome(() -> saved.setValue(List.of(9))) + ";state=" + map;
+  }
+  static String emptyHash(boolean donor) {
+    Map<Object,List<Integer>> backing = donor ? new M3LinkedHashMap<>() : new LinkedHashMap<>();
+    var map=new MultiValueMapAdapter<>(backing);
+    Object key=new Object() { @Override public int hashCode() { throw new IllegalArgumentException("user hash callback"); } };
+    return outcome(() -> map.containsKey(key));
+  }
+  static String replaceAll(boolean donor) {
+    Map<String,Integer> map=donor ? new M3LinkedHashMap<>() : new LinkedHashMap<>();
+    map.put("a",1); map.put("b",2); List<String> trace=new ArrayList<>();
+    String result=outcome(() -> { map.replaceAll((key,value) -> { trace.add(key); if(key.equals("a"))map.put("c",3); return value+10; }); return null; });
+    return result + ";callbacks=" + trace + ";state=" + map;
+  }
+  static String outcome(Supplier<?> action) {
+    try { return String.valueOf(action.get()); }
+    catch(RuntimeException error) { return error.getClass().getName() + ":" + error.getMessage(); }
+  }
+  static void compare(String label, Supplier<String> nativeRun, Supplier<String> donorRun) {
+    String nativeResult=nativeRun.get(), donorResult=donorRun.get();
+    if(nativeResult.equals(donorResult))throw new AssertionError("counterexample no longer distinguishes: " + label);
+    System.out.println(label + "\t" + nativeResult + "\t" + donorResult);
+  }
+}

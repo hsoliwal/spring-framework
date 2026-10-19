@@ -1,0 +1,76 @@
+import com.sun.source.tree.*;
+import com.sun.source.util.*;
+import java.nio.file.*;
+import java.util.*;
+import javax.tools.*;
+
+// Read-only inventory using the JDK parser, without attribution or custom parsing.
+public final class StorageCensus {
+  private static final Set<String> TYPES = Set.of("ArrayList", "LinkedList", "ArrayDeque", "HashMap",
+      "LinkedHashMap", "HashSet", "LinkedHashSet", "TreeMap", "TreeSet", "EnumMap", "EnumSet",
+      "IdentityHashMap", "WeakHashMap", "ConcurrentHashMap", "ConcurrentSkipListMap",
+      "ConcurrentSkipListSet", "ConcurrentLinkedQueue", "ConcurrentLinkedDeque", "LinkedBlockingQueue",
+      "ArrayBlockingQueue", "PriorityQueue", "PriorityBlockingQueue", "CopyOnWriteArrayList", "CopyOnWriteArraySet");
+  public static void main(String[] args) throws Exception {
+    Path root = Path.of(args[0]).toAbsolutePath().normalize(), output = Path.of(args[1]);
+    List<Path> sources;
+    try (var files = Files.walk(root)) {
+      sources = files.filter(Files::isRegularFile).filter(p -> p.toString().contains("/src/main/"))
+          .filter(p -> p.toString().endsWith(".java"))
+          .filter(p -> !root.relativize(p).toString().split("/src/main/", 2)[0].contains("/build/"))
+          .sorted().toList();
+    }
+    var compiler = ToolProvider.getSystemJavaCompiler();
+    List<String> rows = new ArrayList<>(List.of("path\tline\towner\tkind\ttype\tmember"));
+    try (var manager = compiler.getStandardFileManager(null, null, null)) {
+      var task = (JavacTask) compiler.getTask(null, manager, null, List.of("-proc:none"), null,
+          manager.getJavaFileObjectsFromPaths(sources));
+      var trees = Trees.instance(task);
+      for (var unit : task.parse()) {
+        Path source = Path.of(unit.getSourceFile().toUri());
+        Map<String,String> imports = new HashMap<>();
+        for (var item : unit.getImports()) {
+          String name = item.getQualifiedIdentifier().toString();
+          imports.put(name.substring(name.lastIndexOf('.') + 1), name);
+        }
+        new TreePathScanner<Void,Void>() {
+          final Deque<String> owners = new ArrayDeque<>();
+          String flat(Object value) { return String.valueOf(value).replace('\n',' ').replace('\t',' '); }
+          String owner() { return String.join("$",owners); }
+          void row(Tree node, String kind, String type, String member) {
+            long position = trees.getSourcePositions().getStartPosition(unit,node);
+            rows.add(root.relativize(source) + "\t" + unit.getLineMap().getLineNumber(position)
+                + "\t" + owner() + "\t" + kind + "\t" + flat(type) + "\t" + flat(member));
+          }
+          String raw(Tree type) { return type instanceof ParameterizedTypeTree parameter ? parameter.getType().toString() : type.toString(); }
+          @Override public Void visitClass(ClassTree node, Void unused) {
+            owners.addLast(node.getSimpleName().toString().isEmpty() ? "<anonymous>" : node.getSimpleName().toString());
+            String bases = flat(node.getExtendsClause()) + " " + flat(node.getImplementsClause());
+            if (bases.matches(".*\\b(?:Map|List|Set|Collection|Queue|Deque|Iterator|ConcurrentMap|AbstractMap|AbstractList|AbstractSet|AbstractCollection|LinkedHashMap|HashMap|ArrayList|Properties|MultiValueMap)\\b.*")) {
+              row(node,"COLLECTION_TYPE",bases,node.getKind().name());
+            }
+            super.visitClass(node,unused); owners.removeLast(); return null;
+          }
+          @Override public Void visitVariable(VariableTree node, Void unused) {
+            Tree parent = getCurrentPath().getParentPath().getLeaf();
+            if (parent instanceof ClassTree && node.getType()!=null) {
+              String type=flat(node.getType());
+              if (type.matches(".*\\b(?:Map|List|Set|Collection|Queue|Deque|Iterator|ConcurrentMap|ArrayList|LinkedList|ArrayDeque|LinkedHashMap|HashMap|Node|Entry|Reference|AtomicReferenceArray)\\b.*") || type.contains("[]"))
+                row(node,"RETAINED_FIELD",type,node.getName().toString());
+            }
+            return super.visitVariable(node,unused);
+          }
+          @Override public Void visitNewClass(NewClassTree node, Void unused) {
+            String raw = raw(node.getIdentifier()), simple = raw.substring(raw.lastIndexOf('.')+1);
+            String resolved = imports.getOrDefault(raw,raw);
+            if (TYPES.contains(simple) && (resolved.startsWith("java.util.") || imports.containsKey("*")))
+              row(node,"JDK_CONSTRUCTION",resolved,"new " + flat(node.getIdentifier()));
+            return super.visitNewClass(node,unused);
+          }
+        }.scan(unit,null);
+      }
+    }
+    Files.createDirectories(output.getParent()); Files.write(output,rows);
+    System.out.println("Parsed " + sources.size() + " production Java sources; " + (rows.size()-1) + " structural storage rows");
+  }
+}
