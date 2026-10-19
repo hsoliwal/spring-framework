@@ -5,7 +5,7 @@ permissions:
 jobs:
   build:
     name: Build Pull Request
-    if: ${{ github.repository == 'spring-projects/spring-framework' }}
+    if: ${{ github.repository == 'spring-projects/spring-framework' || github.repository == 'hsoliwal/spring-framework' }}
     runs-on: ubuntu-latest
     steps:
       - name: Check Out Code
