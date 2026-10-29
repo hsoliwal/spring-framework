@@ -1,9 +1,0 @@
---simple-boundary
-Content-Disposition: form-data; name="file"; filename="test.txt"
-
-
---simple-boundary
-Content-Disposition: form-data; name="action"
-
-asd
---simple-boundary--

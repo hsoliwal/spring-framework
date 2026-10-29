@@ -1,9 +1,0 @@
---boundary
-Content-Disposition: form-data; name="text1"
-
-
---boundary
-Content-Disposition: form-data; name="text2"
-
-a
---boundary--
