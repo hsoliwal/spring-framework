@@ -1,0 +1,421 @@
+/*
+ * Copyright 2002-present the original author or authors.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.springframework.util;
+
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
+
+import org.jspecify.annotations.Nullable;
+import org.junit.jupiter.api.Nested;
+import org.junit.jupiter.api.Test;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
+import static org.assertj.core.api.Assertions.entry;
+
+/**
+ * @author Arjen Poutsma
+ * @author Yanming Zhou
+ */
+class CompositeMapTests {
+
+	@Test
+	void size() {
+		Map<String, String> first = Map.of("foo", "bar", "baz", "qux");
+		Map<String, String> second = Map.of("quux", "corge");
+		CompositeMap<String, String> composite = new CompositeMap<>(first, second);
+
+		assertThat(composite).hasSize(3);
+	}
+
+	@Test
+	void isEmpty() {
+		Map<String, String> first = Map.of("foo", "bar", "baz", "qux");
+		Map<String, String> second = Map.of("quux", "corge");
+		CompositeMap<String, String> composite = new CompositeMap<>(first, second);
+
+		assertThat(composite).isNotEmpty();
+
+		composite = new CompositeMap<>(Collections.emptyMap(), Collections.emptyMap());
+		assertThat(composite).isEmpty();
+	}
+
+	@Test
+	void containsKey() {
+		Map<String, String> first = Map.of("foo", "bar", "baz", "qux");
+		Map<String, String> second = Map.of("quux", "corge");
+		CompositeMap<String, String> composite = new CompositeMap<>(first, second);
+
+		assertThat(composite.containsKey("foo")).isTrue();
+		assertThat(composite.containsKey("bar")).isFalse();
+		assertThat(composite.containsKey("baz")).isTrue();
+		assertThat(composite.containsKey("qux")).isFalse();
+		assertThat(composite.containsKey("quux")).isTrue();
+		assertThat(composite.containsKey("corge")).isFalse();
+	}
+
+	@Test
+	void containsValue() {
+		Map<String, String> first = Map.of("foo", "bar", "baz", "qux");
+		Map<String, String> second = Map.of("quux", "corge");
+		CompositeMap<String, String> composite = new CompositeMap<>(first, second);
+
+		assertThat(composite.containsValue("foo")).isFalse();
+		assertThat(composite.containsValue("bar")).isTrue();
+		assertThat(composite.containsValue("baz")).isFalse();
+		assertThat(composite.containsValue("qux")).isTrue();
+		assertThat(composite.containsValue("quux")).isFalse();
+		assertThat(composite.containsValue("corge")).isTrue();
+	}
+
+	@Test
+	void get() {
+		Map<String, String> first = Map.of("foo", "bar", "baz", "qux");
+		Map<String, String> second = Map.of("quux", "corge");
+		CompositeMap<String, String> composite = new CompositeMap<>(first, second);
+
+		assertThat(composite.get("foo")).isEqualTo("bar");
+		assertThat(composite.get("baz")).isEqualTo("qux");
+		assertThat(composite.get("quux")).isEqualTo("corge");
+
+		assertThat(composite.get("grault")).isNull();
+	}
+
+	@Test
+	void putUnsupported() {
+		Map<String, String> first = Map.of("foo", "bar");
+		Map<String, String> second = Map.of("baz", "qux");
+		CompositeMap<String, String> composite = new CompositeMap<>(first, second);
+
+		assertThatExceptionOfType(UnsupportedOperationException.class).isThrownBy(() -> composite.put("grault", "garply"));
+	}
+	@Test
+	void putSupported() {
+		Map<String, String> first = Map.of("foo", "bar");
+		Map<String, String> second = Map.of("baz", "qux");
+		CompositeMap<String, String> composite = new CompositeMap<>(first, second, (k,v) -> {
+			assertThat(k).isEqualTo("quux");
+			assertThat(v).isEqualTo("corge");
+			return "grault";
+		}, null);
+
+		assertThat(composite.put("quux", "corge")).isEqualTo("grault");
+	}
+
+	@Test
+	void remove() {
+		Map<String, String> first = new HashMap<>(Map.of("foo", "bar", "baz", "qux"));
+		Map<String, String> second = new HashMap<>(Map.of("quux", "corge"));
+		CompositeMap<String, String> composite = new CompositeMap<>(first, second);
+
+		assertThat(composite.remove("foo")).isEqualTo("bar");
+		assertThat(composite.containsKey("foo")).isFalse();
+		assertThat(first).containsExactly(entry("baz", "qux"));
+
+		assertThat(composite.remove("grault")).isNull();
+	}
+
+	@Test
+	void putAllUnsupported() {
+		Map<String, String> first = Map.of("foo", "bar");
+		Map<String, String> second = Map.of("baz", "qux");
+
+		CompositeMap<String, String> composite = new CompositeMap<>(first, second);
+
+		assertThatExceptionOfType(UnsupportedOperationException.class).isThrownBy(() -> composite.putAll(Map.of("quux", "corge", "grault", "garply")));
+	}
+
+	@Test
+	void putAllPutFunction() {
+		Map<String, String> first = Map.of("foo", "bar");
+		Map<String, String> second = Map.of("baz", "qux");
+
+		AtomicBoolean functionInvoked = new AtomicBoolean();
+		CompositeMap<String, String> composite = new CompositeMap<>(first, second, (k,v) -> {
+			assertThat(k).isEqualTo("quux");
+			assertThat(v).isEqualTo("corge");
+			functionInvoked.set(true);
+			return "grault";
+		}, null);
+
+		composite.putAll(Map.of("quux", "corge"));
+
+		assertThat(functionInvoked).isTrue();
+	}
+
+	@Test
+	void putAllPutAllFunction() {
+		Map<String, String> first = Map.of("foo", "bar");
+		Map<String, String> second = Map.of("baz", "qux");
+
+		AtomicBoolean functionInvoked = new AtomicBoolean();
+		Map<String, String> argument = Map.of("quux", "corge");
+		CompositeMap<String, String> composite = new CompositeMap<>(first, second, null,
+				m -> {
+					assertThat(m).isSameAs(argument);
+					functionInvoked.set(true);
+				});
+
+		composite.putAll(argument);
+
+		assertThat(functionInvoked).isTrue();
+	}
+
+	@Test
+	void clear() {
+		Map<String, String> first = new HashMap<>(Map.of("foo", "bar", "baz", "qux"));
+		Map<String, String> second = new HashMap<>(Map.of("quux", "corge"));
+		CompositeMap<String, String> composite = new CompositeMap<>(first, second);
+
+		composite.clear();
+
+		assertThat(composite).isEmpty();
+		assertThat(first).isEmpty();
+		assertThat(second).isEmpty();
+	}
+
+	@Test
+	void keySet() {
+		Map<String, String> first = Map.of("foo", "bar");
+		Map<String, String> second = Map.of("baz", "qux");
+		CompositeMap<String, String> composite = new CompositeMap<>(first, second);
+
+		Set<String> keySet = composite.keySet();
+		assertThat(keySet).containsExactly("foo", "baz");
+	}
+
+	@Test
+	void values() {
+		Map<String, String> first = Map.of("foo", "bar");
+		Map<String, String> second = Map.of("baz", "qux");
+		CompositeMap<String, String> composite = new CompositeMap<>(first, second);
+
+		Collection<String> values = composite.values();
+		assertThat(values).containsExactly("bar", "qux");
+	}
+
+	@Test
+	void entrySet() {
+		Map<String, String> first = Map.of("foo", "bar");
+		Map<String, String> second = Map.of("baz", "qux");
+		CompositeMap<String, String> composite = new CompositeMap<>(first, second);
+
+		Set<Map.Entry<String, String>> entries = composite.entrySet();
+		assertThat(entries).containsExactly(entry("foo", "bar"), entry("baz", "qux"));
+	}
+
+	@Test
+	void nullable() {
+		Map<String, @Nullable String> first = new HashMap<>();
+		first.put("foo", "bar");
+		Map<String, @Nullable String> second = new HashMap<>();
+		second.put("baz", null);
+		CompositeMap<String, @Nullable String> composite = new CompositeMap<>(first, second);
+
+		assertThat(composite).containsExactly(entry("foo", "bar"), entry("baz", null));
+	}
+
+	@Test
+	void equalsAndHashCode() {
+		Map<String, String> composite = CollectionUtils.compositeMap(
+				Map.of("foo", "bar"), Map.of("baz", "qux"));
+		Map<String, String> expected = Map.of("foo", "bar", "baz", "qux");
+		Map<String, String> other = CollectionUtils.compositeMap(expected, Collections.emptyMap());
+
+		assertThat(composite).isEqualTo(expected);
+		assertThat(expected).isEqualTo(composite);
+		assertThat(composite).isEqualTo(other);
+		assertThat(other).isEqualTo(composite);
+		assertThat(composite).hasSameHashCodeAs(expected);
+		assertThat(composite).hasSameHashCodeAs(other);
+	}
+
+	@Test
+	void equalsWithDifferentMappings() {
+		Map<String, String> composite = CollectionUtils.compositeMap(
+				Map.of("foo", "bar"), Collections.emptyMap());
+
+		assertThat(composite).isNotEqualTo(null);
+		assertThat(composite).isNotEqualTo("foo=bar");
+		assertThat(composite).isNotEqualTo(Collections.emptyMap());
+		assertThat(composite).isNotEqualTo(Map.of("foo", "baz"));
+		assertThat(composite).isNotEqualTo(Map.of("baz", "bar"));
+	}
+
+	@Test
+	void equalsAndHashCodeWithEmptyMaps() {
+		Map<String, String> composite = CollectionUtils.compositeMap(
+				Collections.emptyMap(), Collections.emptyMap());
+		Map<String, String> expected = Collections.emptyMap();
+
+		assertThat(composite).isEqualTo(expected);
+		assertThat(expected).isEqualTo(composite);
+		assertThat(composite).hasSameHashCodeAs(expected);
+	}
+
+	@Test
+	void equalsAndHashCodeWithCollidingKeys() {
+		Map<String, String> composite = CollectionUtils.compositeMap(
+				Map.of("foo", "bar"), Map.of("foo", "hidden", "baz", "qux"));
+		Map<String, String> expected = Map.of("foo", "bar", "baz", "qux");
+
+		assertThat(composite).isEqualTo(expected);
+		assertThat(expected).isEqualTo(composite);
+		assertThat(composite).isNotEqualTo(Map.of("foo", "hidden", "baz", "qux"));
+		assertThat(composite).hasSameHashCodeAs(expected);
+	}
+
+	@Test
+	void equalsAndHashCodeWithNullValues() {
+		Map<String, @Nullable String> first = new HashMap<>();
+		first.put("foo", null);
+		Map<String, @Nullable String> composite = CollectionUtils.compositeMap(
+				first, Map.of("foo", "hidden", "baz", "qux"));
+		Map<String, @Nullable String> expected = new HashMap<>(first);
+		expected.put("baz", "qux");
+
+		assertThat(composite).isEqualTo(expected);
+		assertThat(expected).isEqualTo(composite);
+		assertThat(composite).hasSameHashCodeAs(expected);
+		expected.remove("foo");
+		expected.put("other", null);
+		assertThat(composite).isNotEqualTo(expected);
+	}
+
+	@Test
+	void hashSetLookup() {
+		Map<String, String> composite = CollectionUtils.compositeMap(
+				Map.of("foo", "bar"), Map.of("baz", "qux"));
+		Map<String, String> expected = Map.of("foo", "bar", "baz", "qux");
+
+		// Check whether equals/hashCode works in a HashSet.
+		Set<Map<String, String>> maps = new HashSet<>();
+		maps.add(expected);
+		maps.add(composite);
+		assertThat(maps).hasSize(1);
+	}
+
+	@Nested
+	class CollisionTests {
+
+		@Test
+		void size() {
+			Map<String, String> first = Map.of("foo", "bar", "baz", "qux");
+			Map<String, String> second = Map.of("baz", "quux", "corge", "grault");
+			CompositeMap<String, String> composite = new CompositeMap<>(first, second);
+
+			assertThat(composite).hasSize(3);
+		}
+
+		@Test
+		void containsValue() {
+			Map<String, String> first = Map.of("foo", "bar", "baz", "qux");
+			Map<String, String> second = Map.of("baz", "quux", "corge", "grault");
+			CompositeMap<String, String> composite = new CompositeMap<>(first, second);
+
+			assertThat(composite.containsValue("bar")).isTrue();
+			assertThat(composite.containsValue("qux")).isTrue();
+			assertThat(composite.containsValue("quux")).isFalse();
+			assertThat(composite.containsValue("grault")).isTrue();
+		}
+
+		@Test
+		void get() {
+			Map<String, String> first = Map.of("foo", "bar", "baz", "qux");
+			Map<String, String> second = Map.of("baz", "quux", "corge", "grault");
+			CompositeMap<String, String> composite = new CompositeMap<>(first, second);
+
+			assertThat(composite.get("foo")).isEqualTo("bar");
+			assertThat(composite.get("baz")).isEqualTo("qux");
+			assertThat(composite.get("corge")).isEqualTo("grault");
+		}
+
+		@Test
+		void remove() {
+			Map<String, String> first = new HashMap<>(Map.of("foo", "bar", "baz", "qux"));
+			Map<String, String> second = new HashMap<>(Map.of("baz", "quux", "corge", "grault"));
+			CompositeMap<String, String> composite = new CompositeMap<>(first, second);
+
+			assertThat(composite.remove("baz")).isEqualTo("qux");
+			assertThat(composite.containsKey("baz")).isFalse();
+			assertThat(first).containsExactly(entry("foo", "bar"));
+			assertThat(second).containsExactly(entry("corge", "grault"));
+		}
+
+		@Test
+		void keySet() {
+			Map<String, String> first = Map.of("foo", "bar", "baz", "qux");
+			Map<String, String> second = Map.of("baz", "quux", "corge", "grault");
+			CompositeMap<String, String> composite = new CompositeMap<>(first, second);
+
+			Set<String> keySet = composite.keySet();
+			assertThat(keySet).containsExactlyInAnyOrder("foo", "baz", "corge");
+		}
+
+		@Test
+		void keySetRemove() {
+			Map<String, String> first = new HashMap<>(Map.of("foo", "bar", "baz", "qux"));
+			Map<String, String> second = new HashMap<>(Map.of("baz", "quux", "corge", "grault"));
+			CompositeMap<String, String> composite = new CompositeMap<>(first, second);
+
+			assertThat(composite.keySet().remove("baz")).isTrue();
+			assertThat(composite.containsKey("baz")).isFalse();
+			assertThat(composite.keySet()).containsExactlyInAnyOrder("foo", "corge");
+			assertThat(first).containsExactly(entry("foo", "bar"));
+			assertThat(second).containsExactly(entry("corge", "grault"));
+		}
+
+		@Test
+		void values() {
+			Map<String, String> first = Map.of("foo", "bar", "baz", "qux");
+			Map<String, String> second = Map.of("baz", "quux", "corge", "grault");
+			CompositeMap<String, String> composite = new CompositeMap<>(first, second);
+
+			Collection<String> values = composite.values();
+			assertThat(values).containsExactlyInAnyOrder("bar", "qux", "grault");
+		}
+
+		@Test
+		void entrySet() {
+			Map<String, String> first = Map.of("foo", "bar", "baz", "qux");
+			Map<String, String> second = Map.of("baz", "quux", "corge", "grault");
+			CompositeMap<String, String> composite = new CompositeMap<>(first, second);
+
+			Set<Map.Entry<String, String>> entries = composite.entrySet();
+			assertThat(entries).containsExactlyInAnyOrder(entry("foo", "bar"), entry("baz", "qux"), entry("corge", "grault"));
+		}
+
+		@Test
+		void entrySetRemoveWithIdenticalEntries() {
+			Map<String, String> first = new HashMap<>(Map.of("foo", "bar", "baz", "qux"));
+			Map<String, String> second = new HashMap<>(Map.of("baz", "qux", "corge", "grault"));
+			CompositeMap<String, String> composite = new CompositeMap<>(first, second);
+
+			assertThat(composite.entrySet().remove(entry("baz", "qux"))).isTrue();
+			assertThat(composite.containsKey("baz")).isFalse();
+			assertThat(composite.entrySet()).containsExactlyInAnyOrder(entry("foo", "bar"), entry("corge", "grault"));
+			assertThat(first).containsExactly(entry("foo", "bar"));
+			assertThat(second).containsExactly(entry("corge", "grault"));
+		}
+
+	}
+}

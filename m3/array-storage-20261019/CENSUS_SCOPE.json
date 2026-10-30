@@ -1,0 +1,21 @@
+{
+  "repository": "hsoliwal/spring-framework",
+  "baseline": "49adc91c7e41eaafb52fc11e1210989894bda1f3",
+  "source_scope": "Every git-tracked production Java source whose path contains /src/main/",
+  "production_sources": 5474,
+  "jdk_parser_source_count": 5474,
+  "core_util_sources": 113,
+  "structural_rows": 4859,
+  "structural_row_kinds": {
+    "RETAINED_FIELD": 2438,
+    "JDK_CONSTRUCTION": 2305,
+    "COLLECTION_TYPE": 116
+  },
+  "ledger_owner_rows": 1737,
+  "method": "JDK25 JavacTask.parse/TreePathScanner without semantic attribution; rows are exact syntax observations, not claims of completed conversion or transitive ownership. Only explicit JDK constructor imports are selected; factories and inherited owners require manual ledger entries.",
+  "qualified_production_owners": [
+    "org.springframework.util.CompositeIterator",
+    "org.springframework.aot.hint.JdkProxyHint.Builder"
+  ],
+  "review": "Read-only independent source review found no concrete callback/order counterexample; runtime proof remains separate."
+}

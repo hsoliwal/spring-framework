@@ -1,0 +1,7 @@
+case	native	donor
+adapter_serialization	roundtrip={a=[1], b=[2]}	java.io.NotSerializableException:com.m3.collections.M3LinkedHashMap
+adapter_iterator_hasNext_after_put	true	java.util.ConcurrentModificationException:null
+adapter_forEach_append_callback	java.util.ConcurrentModificationException:null;callbacks=[a, b, c];state={a=[1], b=[2], c=[3]}	java.util.ConcurrentModificationException:null;callbacks=[a];state={a=[1], b=[2], c=[3]}
+adapter_detached_entry	saved=[1];set=[1];state={b=[2]}	saved=null;set=java.lang.IllegalStateException:entry no longer present;state={b=[2]}
+empty_adapter_hash_callback	false	java.lang.IllegalArgumentException:user hash callback
+donor_replaceAll_append_callback	java.util.ConcurrentModificationException:null;callbacks=[a, b, c];state={a=11, b=12, c=13}	java.util.ConcurrentModificationException:null;callbacks=[a];state={a=1, b=2, c=3}
