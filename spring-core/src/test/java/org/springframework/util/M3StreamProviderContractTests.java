@@ -17,6 +17,13 @@
 // SPDX-FileCopyrightText: 2026 Hitesh Soliwal and contributors
 // SPDX-License-Identifier: Apache-2.0
 
+ */
+
+/*
+ * Copyright 2026 Hitesh Soliwal and contributors.
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 package org.springframework.util;
 
 import java.util.ArrayList;
@@ -42,6 +49,9 @@ class M3StreamProviderContractTests {
 
 		assertThat(detached).containsExactly("one", "one");
 		assertThat(live).containsExactly("one", "one", "two").isNotSameAs(detached);
+		assertThat(detached).isEqualTo(List.of("one", "one"));
+		assertThat(live).isEqualTo(List.of("one", "one", "two"));
+		assertThat(detached).isNotSameAs(live);
 
 		LinkedCaseInsensitiveMap<String> headers = new LinkedCaseInsensitiveMap<>(Locale.ROOT);
 		headers.put("X-Trace", "present");
