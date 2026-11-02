@@ -233,37 +233,6 @@ final class SingleToMultiValueMapAdapter<K, V> implements MultiValueMap<K, V>, S
 		return entries;
 	}
 
-	private final class EntrySet extends AbstractSet<Entry<K, List<V>>> {
-
-		private final Set<Entry<K, V>> targetEntries;
-
-		EntrySet(Set<Entry<K, V>> targetEntries) {
-			this.targetEntries = targetEntries;
-		}
-
-		@Override
-		public Iterator<Entry<K, List<V>>> iterator() {
-			Iterator<Entry<K, V>> targetIterator = this.targetEntries.iterator();
-			return new Iterator<>() {
-				@Override
-				public boolean hasNext() {
-					return targetIterator.hasNext();
-				}
-
-				@Override
-				public Entry<K, List<V>> next() {
-					Entry<K, V> entry = targetIterator.next();
-					return new AbstractMap.SimpleImmutableEntry<>(entry.getKey(), Collections.singletonList(entry.getValue()));
-				}
-			};
-		}
-
-		@Override
-		public int size() {
-			return this.targetEntries.size();
-		}
-	}
-
 	@Override
 	public void forEach(BiConsumer<? super K, ? super List<V>> action) {
 		this.targetMap.forEach((k, v) -> action.accept(k, Collections.singletonList(v)));
@@ -308,6 +277,38 @@ final class SingleToMultiValueMapAdapter<K, V> implements MultiValueMap<K, V>, S
 	@Override
 	public String toString() {
 		return this.targetMap.toString();
+	}
+
+
+	private final class EntrySet extends AbstractSet<Entry<K, List<V>>> {
+
+		private final Set<Entry<K, V>> targetEntries;
+
+		EntrySet(Set<Entry<K, V>> targetEntries) {
+			this.targetEntries = targetEntries;
+		}
+
+		@Override
+		public Iterator<Entry<K, List<V>>> iterator() {
+			Iterator<Entry<K, V>> targetIterator = this.targetEntries.iterator();
+			return new Iterator<>() {
+				@Override
+				public boolean hasNext() {
+					return targetIterator.hasNext();
+				}
+
+				@Override
+				public Entry<K, List<V>> next() {
+					Entry<K, V> entry = targetIterator.next();
+					return new AbstractMap.SimpleImmutableEntry<>(entry.getKey(), Collections.singletonList(entry.getValue()));
+				}
+			};
+		}
+
+		@Override
+		public int size() {
+			return this.targetEntries.size();
+		}
 	}
 
 }

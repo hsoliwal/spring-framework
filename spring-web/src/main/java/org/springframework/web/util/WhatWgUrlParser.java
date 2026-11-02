@@ -22,7 +22,6 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Iterator;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
@@ -56,6 +55,7 @@ import org.springframework.util.Assert;
  *
  * @author Arjen Poutsma
  * @author Sebastien Deleuze
+ * @author Hitesh Soliwal and Contributors to the Synexia Project
  * @since 6.2
  */
 @SuppressWarnings({"SameParameterValue", "BooleanMethodIsAlwaysInverted"})
@@ -249,11 +249,11 @@ final class WhatWgUrlParser {
 		return (this.openCurlyBracketCount > 0 && c != EOF);
 	}
 
-	private static LinkedList<String> strictSplit(String input, int delimiter) {
+	private static List<String> strictSplit(String input, int delimiter) {
 		// Let position be a position variable for input, initially pointing at the start of input.
 		int position = 0;
 		// Let tokens be a list of strings, initially empty.
-		LinkedList<String> tokens = new LinkedList<>();
+		List<String> tokens = new ArrayList<>();
 		// Let token be the result of collecting a sequence of code points that are not equal to delimiter from input, given position.
 		int delIdx = input.indexOf(delimiter, position);
 		String token = (delIdx != EOF) ? input.substring(position, delIdx) : input.substring(position);
@@ -2100,21 +2100,21 @@ final class WhatWgUrlParser {
 
 		private static boolean endsInNumber(String input) {
 			// Let parts be the result of strictly splitting input on U+002E (.).
-			LinkedList<String> parts = strictSplit(input, '.');
+			List<String> parts = strictSplit(input, '.');
 			if (parts.isEmpty()) {
 				return false;
 			}
 			// If the last item in parts is the empty string, then:
-			if (parts.getLast().isEmpty()) {
+			if (parts.get(parts.size() - 1).isEmpty()) {
 				// If parts’s size is 1, then return false.
 				if (parts.size() == 1) {
 					return false;
 				}
 				// Remove the last item from parts.
-				parts.removeLast();
+				parts.remove(parts.size() - 1);
 			}
 			// Let last be the last item in parts.
-			String last = parts.getLast();
+			String last = parts.get(parts.size() - 1);
 			// If last is non-empty and contains only ASCII digits, then return true.
 			if (!last.isEmpty() && containsOnlyAsciiDigits(last)) {
 				return true;

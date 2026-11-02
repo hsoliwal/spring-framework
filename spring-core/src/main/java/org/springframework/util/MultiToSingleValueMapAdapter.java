@@ -169,37 +169,6 @@ final class MultiToSingleValueMapAdapter<K, V> implements Map<K, V>, Serializabl
 		return entries;
 	}
 
-	private final class EntrySet extends AbstractSet<Entry<K, V>> {
-
-		private final Set<Entry<K, List<V>>> targetEntries;
-
-		EntrySet(Set<Entry<K, List<V>>> targetEntries) {
-			this.targetEntries = targetEntries;
-		}
-
-		@Override
-		public Iterator<Entry<K, V>> iterator() {
-			Iterator<Entry<K, List<V>>> targetIterator = this.targetEntries.iterator();
-			return new Iterator<>() {
-				@Override
-				public boolean hasNext() {
-					return targetIterator.hasNext();
-				}
-
-				@Override
-				public Entry<K, V> next() {
-					Entry<K, List<V>> entry = targetIterator.next();
-					return new AbstractMap.SimpleImmutableEntry<>(entry.getKey(), entry.getValue().get(0));
-				}
-			};
-		}
-
-		@Override
-		public int size() {
-			return this.targetEntries.size();
-		}
-	}
-
 	@Override
 	public void forEach(BiConsumer<? super K, ? super V> action) {
 		this.targetMap.forEach((k, vs) -> action.accept(k, vs.get(0)));
@@ -262,6 +231,38 @@ final class MultiToSingleValueMapAdapter<K, V> implements Map<K, V>, Serializabl
 	@Override
 	public String toString() {
 		return this.targetMap.toString();
+	}
+
+
+	private final class EntrySet extends AbstractSet<Entry<K, V>> {
+
+		private final Set<Entry<K, List<V>>> targetEntries;
+
+		EntrySet(Set<Entry<K, List<V>>> targetEntries) {
+			this.targetEntries = targetEntries;
+		}
+
+		@Override
+		public Iterator<Entry<K, V>> iterator() {
+			Iterator<Entry<K, List<V>>> targetIterator = this.targetEntries.iterator();
+			return new Iterator<>() {
+				@Override
+				public boolean hasNext() {
+					return targetIterator.hasNext();
+				}
+
+				@Override
+				public Entry<K, V> next() {
+					Entry<K, List<V>> entry = targetIterator.next();
+					return new AbstractMap.SimpleImmutableEntry<>(entry.getKey(), entry.getValue().get(0));
+				}
+			};
+		}
+
+		@Override
+		public int size() {
+			return this.targetEntries.size();
+		}
 	}
 
 }
