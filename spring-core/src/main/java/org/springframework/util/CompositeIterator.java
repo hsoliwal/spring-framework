@@ -14,6 +14,9 @@
  * limitations under the License.
  */
 
+// Modified 2026-11-02 by Hitesh Soliwal and Contributors to the Synexia Project:
+// defer iterator registration storage until first add and share empty traversal storage.
+
 package org.springframework.util;
 
 import java.util.Iterator;
@@ -39,7 +42,9 @@ import org.jspecify.annotations.Nullable;
  */
 public class CompositeIterator<E extends @Nullable Object> implements Iterator<E> {
 
-	private @Nullable Set<Iterator<E>> iterators = new LinkedHashSet<>();
+	private static final Iterator<?>[] EMPTY_ITERATORS = new Iterator<?>[0];
+
+	private @Nullable Set<Iterator<E>> iterators;
 
 	private Iterator<E> @Nullable [] traversal;
 
@@ -54,7 +59,10 @@ public class CompositeIterator<E extends @Nullable Object> implements Iterator<E
 	public void add(Iterator<E> iterator) {
 		Assert.state(!this.inUse, "You can no longer add iterators to a composite iterator that's already in use");
 		Set<Iterator<E>> pending = this.iterators;
-		Assert.state(pending != null, "Iterator registration is closed");
+		if (pending == null) {
+			pending = new LinkedHashSet<>();
+			this.iterators = pending;
+		}
 		this.additions++;
 		try {
 			if (pending.contains(iterator)) {
@@ -123,8 +131,9 @@ public class CompositeIterator<E extends @Nullable Object> implements Iterator<E
 	@SuppressWarnings("unchecked")
 	private void freezeIterators() {
 		Set<Iterator<E>> pending = this.iterators;
-		if (this.inUse && this.additions == 0 && pending != null) {
-			this.traversal = pending.toArray(Iterator[]::new);
+		if (this.inUse && this.additions == 0 && this.traversal == null) {
+			this.traversal = (pending != null ? pending.toArray(Iterator[]::new) :
+					(Iterator<E>[]) EMPTY_ITERATORS);
 			this.iterators = null;
 		}
 	}
