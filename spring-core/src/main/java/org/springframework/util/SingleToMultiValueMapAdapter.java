@@ -49,7 +49,7 @@ final class SingleToMultiValueMapAdapter<K, V> implements MultiValueMap<K, V>, S
 
 	private transient @Nullable Collection<List<V>> values;
 
-	private transient @Nullable Set<Entry<K, List<V>>> entries;
+	private transient @Nullable EntrySet entries;
 
 
 	/**
@@ -130,21 +130,14 @@ final class SingleToMultiValueMapAdapter<K, V> implements MultiValueMap<K, V>, S
 
 	@Override
 	public boolean containsValue(@Nullable Object value) {
-		Iterator<Entry<K, List<V>>> i = entrySet().iterator();
-		if (value == null) {
-			while (i.hasNext()) {
-				Entry<K, List<V>> e = i.next();
-				if (e.getValue() == null || e.getValue().isEmpty()) {
-					return true;
-				}
-			}
-		}
-		else {
-			while (i.hasNext()) {
-				Entry<K, List<V>> e = i.next();
-				if (value.equals(e.getValue())) {
-					return true;
-				}
+		Iterator<Entry<K, V>> iterator = entrySetView().targetEntries.iterator();
+		while (iterator.hasNext()) {
+			Entry<K, V> entry = iterator.next();
+			// Preserve the key-before-value callback order of the public projection.
+			entry.getKey();
+			List<V> candidate = Collections.singletonList(entry.getValue());
+			if (value == null ? (candidate == null || candidate.isEmpty()) : value.equals(candidate)) {
+				return true;
 			}
 		}
 		return false;
@@ -228,33 +221,13 @@ final class SingleToMultiValueMapAdapter<K, V> implements MultiValueMap<K, V>, S
 
 	@Override
 	public Set<Entry<K, List<V>>> entrySet() {
-		Set<Entry<K, List<V>>> entries = this.entries;
+		return entrySetView();
+	}
+
+	private EntrySet entrySetView() {
+		EntrySet entries = this.entries;
 		if (entries == null) {
-			Set<Entry<K, V>> targetEntries = this.targetMap.entrySet();
-			entries = new AbstractSet<>() {
-				@Override
-				public Iterator<Entry<K, List<V>>> iterator() {
-					Iterator<Entry<K, V>> targetIterator = targetEntries.iterator();
-					return new Iterator<>() {
-						@Override
-						public boolean hasNext() {
-							return targetIterator.hasNext();
-						}
-
-						@Override
-						public Entry<K, List<V>> next() {
-							Entry<K, V> entry = targetIterator.next();
-							return new AbstractMap.SimpleImmutableEntry<>(entry.getKey(),
-									Collections.singletonList(entry.getValue()));
-						}
-					};
-				}
-
-				@Override
-				public int size() {
-					return targetEntries.size();
-				}
-			};
+			entries = new EntrySet(this.targetMap.entrySet());
 			this.entries = entries;
 		}
 		return entries;
@@ -273,9 +246,9 @@ final class SingleToMultiValueMapAdapter<K, V> implements MultiValueMap<K, V>, S
 		}
 		if (other instanceof Map<?,?> otherMap && size() == otherMap.size()) {
 			try {
-				for (Entry<K, List<V>> e : entrySet()) {
+				for (Entry<K, V> e : entrySetView().targetEntries) {
 					K key = e.getKey();
-					List<V> values = e.getValue();
+					List<V> values = Collections.singletonList(e.getValue());
 					if (values == null) {
 						if (otherMap.get(key) != null || !otherMap.containsKey(key)) {
 							return false;
@@ -304,6 +277,38 @@ final class SingleToMultiValueMapAdapter<K, V> implements MultiValueMap<K, V>, S
 	@Override
 	public String toString() {
 		return this.targetMap.toString();
+	}
+
+
+	private final class EntrySet extends AbstractSet<Entry<K, List<V>>> {
+
+		private final Set<Entry<K, V>> targetEntries;
+
+		EntrySet(Set<Entry<K, V>> targetEntries) {
+			this.targetEntries = targetEntries;
+		}
+
+		@Override
+		public Iterator<Entry<K, List<V>>> iterator() {
+			Iterator<Entry<K, V>> targetIterator = this.targetEntries.iterator();
+			return new Iterator<>() {
+				@Override
+				public boolean hasNext() {
+					return targetIterator.hasNext();
+				}
+
+				@Override
+				public Entry<K, List<V>> next() {
+					Entry<K, V> entry = targetIterator.next();
+					return new AbstractMap.SimpleImmutableEntry<>(entry.getKey(), Collections.singletonList(entry.getValue()));
+				}
+			};
+		}
+
+		@Override
+		public int size() {
+			return this.targetEntries.size();
+		}
 	}
 
 }

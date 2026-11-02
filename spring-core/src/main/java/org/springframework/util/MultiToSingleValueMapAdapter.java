@@ -48,7 +48,7 @@ final class MultiToSingleValueMapAdapter<K, V> implements Map<K, V>, Serializabl
 
 	private transient @Nullable Collection<V> values;
 
-	private transient @Nullable Set<Entry<K, V>> entries;
+	private transient @Nullable EntrySet entries;
 
 
 	/**
@@ -78,21 +78,14 @@ final class MultiToSingleValueMapAdapter<K, V> implements Map<K, V>, Serializabl
 
 	@Override
 	public boolean containsValue(@Nullable Object value) {
-		Iterator<Entry<K, V>> i = entrySet().iterator();
-		if (value == null) {
-			while (i.hasNext()) {
-				Entry<K, V> e = i.next();
-				if (e.getValue() == null) {
-					return true;
-				}
-			}
-		}
-		else {
-			while (i.hasNext()) {
-				Entry<K, V> e = i.next();
-				if (value.equals(e.getValue())) {
-					return true;
-				}
+		Iterator<Entry<K, List<V>>> iterator = entrySetView().targetEntries.iterator();
+		while (iterator.hasNext()) {
+			Entry<K, List<V>> entry = iterator.next();
+			// Preserve the key-before-value callback order of the public projection.
+			entry.getKey();
+			V candidate = entry.getValue().get(0);
+			if (value == null ? (candidate == null) : value.equals(candidate)) {
+				return true;
 			}
 		}
 		return false;
@@ -164,32 +157,13 @@ final class MultiToSingleValueMapAdapter<K, V> implements Map<K, V>, Serializabl
 
 	@Override
 	public Set<Entry<K, V>> entrySet() {
-		Set<Entry<K, V>> entries = this.entries;
+		return entrySetView();
+	}
+
+	private EntrySet entrySetView() {
+		EntrySet entries = this.entries;
 		if (entries == null) {
-			Set<Entry<K, List<V>>> targetEntries = this.targetMap.entrySet();
-			entries = new AbstractSet<>() {
-				@Override
-				public Iterator<Entry<K, V>> iterator() {
-					Iterator<Entry<K, List<V>>> targetIterator = targetEntries.iterator();
-					return new Iterator<>() {
-						@Override
-						public boolean hasNext() {
-							return targetIterator.hasNext();
-						}
-
-						@Override
-						public Entry<K, V> next() {
-							Entry<K, List<V>> entry = targetIterator.next();
-							return new AbstractMap.SimpleImmutableEntry<>(entry.getKey(), entry.getValue().get(0));
-						}
-					};
-				}
-
-				@Override
-				public int size() {
-					return targetEntries.size();
-				}
-			};
+			entries = new EntrySet(this.targetMap.entrySet());
 			this.entries = entries;
 		}
 		return entries;
@@ -226,9 +200,9 @@ final class MultiToSingleValueMapAdapter<K, V> implements Map<K, V>, Serializabl
 		}
 		if (other instanceof Map<?,?> otherMap && size() == otherMap.size()) {
 			try {
-				for (Entry<K, V> e : entrySet()) {
+				for (Entry<K, List<V>> e : entrySetView().targetEntries) {
 					K key = e.getKey();
-					V value = e.getValue();
+					V value = e.getValue().get(0);
 					if (value == null) {
 						if (otherMap.get(key) != null || !otherMap.containsKey(key)) {
 							return false;
@@ -257,6 +231,38 @@ final class MultiToSingleValueMapAdapter<K, V> implements Map<K, V>, Serializabl
 	@Override
 	public String toString() {
 		return this.targetMap.toString();
+	}
+
+
+	private final class EntrySet extends AbstractSet<Entry<K, V>> {
+
+		private final Set<Entry<K, List<V>>> targetEntries;
+
+		EntrySet(Set<Entry<K, List<V>>> targetEntries) {
+			this.targetEntries = targetEntries;
+		}
+
+		@Override
+		public Iterator<Entry<K, V>> iterator() {
+			Iterator<Entry<K, List<V>>> targetIterator = this.targetEntries.iterator();
+			return new Iterator<>() {
+				@Override
+				public boolean hasNext() {
+					return targetIterator.hasNext();
+				}
+
+				@Override
+				public Entry<K, V> next() {
+					Entry<K, List<V>> entry = targetIterator.next();
+					return new AbstractMap.SimpleImmutableEntry<>(entry.getKey(), entry.getValue().get(0));
+				}
+			};
+		}
+
+		@Override
+		public int size() {
+			return this.targetEntries.size();
+		}
 	}
 
 }
