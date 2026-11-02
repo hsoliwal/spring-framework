@@ -14,6 +14,11 @@
  * limitations under the License.
  */
 
+// SPDX-FileCopyrightText: 2026 Hitesh Soliwal and contributors
+// SPDX-License-Identifier: Apache-2.0
+
+ */
+
 /*
  * Copyright 2026 Hitesh Soliwal and contributors.
  * SPDX-License-Identifier: Apache-2.0
@@ -42,6 +47,8 @@ class M3StreamProviderContractTests {
 
 		multi.add("X-Trace", "two");
 
+		assertThat(detached).containsExactly("one", "one");
+		assertThat(live).containsExactly("one", "one", "two").isNotSameAs(detached);
 		assertThat(detached).isEqualTo(List.of("one", "one"));
 		assertThat(live).isEqualTo(List.of("one", "one", "two"));
 		assertThat(detached).isNotSameAs(live);
@@ -50,4 +57,5 @@ class M3StreamProviderContractTests {
 		headers.put("X-Trace", "present");
 		assertThat(headers.get("x-trace")).isEqualTo("present");
 	}
+
 }
