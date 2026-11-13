@@ -14,15 +14,14 @@
  * limitations under the License.
  */
 
-// Modified 2026-11-02 by Hitesh Soliwal and Contributors to the Synexia Project:
-// defer iterator registration storage until first add and share empty traversal storage.
+// Modified 2026 by Hitesh Soliwal and Synexia contributors:
+// array-own the iterator registry and its hash index; no per-registration Set nodes.
 
 package org.springframework.util;
 
+import java.util.Arrays;
 import java.util.Iterator;
-import java.util.LinkedHashSet;
 import java.util.NoSuchElementException;
-import java.util.Set;
 
 import org.jspecify.annotations.Nullable;
 
@@ -33,10 +32,15 @@ import org.jspecify.annotations.Nullable;
  * <p>This implementation registers iterators in insertion order and invokes
  * them in sequence until all iterators are exhausted.
  *
+ * <p>Registration uses parent-owned arrays for iterator references, hashes and
+ * an open-addressed index. No linked hash-set nodes or copied traversal array
+ * are retained. Registration and duplicate detection are expected O(1), while
+ * traversal follows the original insertion order.
+ *
  * @author Erwin Vervaet
  * @author Juergen Hoeller
  * @author Yanming Zhou
- * @author Hitesh Soliwal and Contributors to the Synexia Project
+ * @author Hitesh Soliwal and Synexia contributors
  * @since 3.0
  * @param <E> the element type
  */
@@ -44,57 +48,124 @@ public class CompositeIterator<E extends @Nullable Object> implements Iterator<E
 
 	private static final Iterator<?>[] EMPTY_ITERATORS = new Iterator<?>[0];
 
-	private @Nullable Set<Iterator<E>> iterators;
+	private static final int[] EMPTY_INTS = new int[0];
 
-	private Iterator<E> @Nullable [] traversal;
+	private Iterator<?>[] iterators = EMPTY_ITERATORS;
 
-	private int additions;
+	private int[] hashes = EMPTY_INTS;
 
-	private boolean inUse = false;
+	/** One-based registration coordinates, zero for an empty bucket. */
+	private int[] hashIndex = EMPTY_INTS;
 
+	private int size;
+
+	private boolean inUse;
 
 	/**
-	 * Add given iterator to this composite.
+	 * Register an iterator. Duplicate checking obeys the incoming iterator's
+	 * hashCode/equals methods, as with the historical LinkedHashSet registry.
 	 */
 	public void add(Iterator<E> iterator) {
-		Assert.state(!this.inUse, "You can no longer add iterators to a composite iterator that's already in use");
-		Set<Iterator<E>> pending = this.iterators;
-		if (pending == null) {
-			pending = new LinkedHashSet<>();
-			this.iterators = pending;
+		Assert.state(!this.inUse,
+				"You can no longer add iterators to a composite iterator that's already in use");
+		// The original empty LinkedHashSet has no HashMap table yet;
+		// contains() does not call the incoming iterator's hashCode then.
+		if (this.size != 0 && containsIterator(iterator, hash(iterator))) {
+			throw new IllegalArgumentException("You cannot add the same iterator twice");
 		}
-		this.additions++;
-		try {
-			if (pending.contains(iterator)) {
-				throw new IllegalArgumentException("You cannot add the same iterator twice");
+		// A subsequent add() always invokes hashCode once, even on a
+		// brand-new set. Re-entrant registration may have changed the table.
+		int hash = hash(iterator);
+		if (!containsIterator(iterator, hash)) {
+			append(iterator, hash);
+		}
+	}
+
+	private static int hash(@Nullable Object iterator) {
+		return iterator == null ? 0 : iterator.hashCode();
+	}
+
+	/** Locate a stored iterator without allocating a Map.Entry or node. */
+	private boolean containsIterator(@Nullable Iterator<E> iterator, int rawHash) {
+		int[] table = this.hashIndex;
+		if (table.length == 0) {
+			return false;
+		}
+		int hash = rawHash ^ (rawHash >>> 16);
+		int position = hash & (table.length - 1);
+		for (;;) {
+			int stored = table[position];
+			if (stored == 0) {
+				return false;
 			}
-			pending.add(iterator);
+			int index = stored - 1;
+			if (this.hashes[index] == rawHash) {
+				Iterator<?> candidate = this.iterators[index];
+				if (candidate == iterator || (iterator != null && iterator.equals(candidate))) {
+					return true;
+				}
+				// equals/hashCode callbacks may reenter registration. Resume from the
+				// current index if an intervening append replaced the bucket array.
+				if (table != this.hashIndex) {
+					table = this.hashIndex;
+					position = hash & (table.length - 1);
+					continue;
+				}
+			}
+			position = (position + 1) & (table.length - 1);
 		}
-		finally {
-			this.additions--;
-			freezeIterators();
+	}
+
+	private void append(@Nullable Iterator<E> iterator, int rawHash) {
+		int current = this.size;
+		if (current == this.iterators.length) {
+			int capacity = current < 4 ? 4 : current + (current >>> 1) + 1;
+			if (capacity <= current) {
+				throw new OutOfMemoryError("Iterator registry exhausted");
+			}
+			Iterator<?>[] grown = Arrays.copyOf(this.iterators, capacity);
+			int[] grownHashes = Arrays.copyOf(this.hashes, capacity);
+			this.iterators = grown;
+			this.hashes = grownHashes;
 		}
+		if (this.hashIndex.length <= (current + 1L) * 2) {
+			int capacity = this.hashIndex.length == 0 ? 16 : this.hashIndex.length << 1;
+			if (capacity <= 0) {
+				throw new OutOfMemoryError("Iterator hash index exhausted");
+			}
+			rehash(capacity);
+		}
+		int hash = rawHash ^ (rawHash >>> 16);
+		int position = hash & (this.hashIndex.length - 1);
+		while (this.hashIndex[position] != 0) {
+			position = (position + 1) & (this.hashIndex.length - 1);
+		}
+		this.iterators[current] = iterator;
+		this.hashes[current] = rawHash;
+		this.hashIndex[position] = current + 1;
+		this.size = current + 1;
+	}
+
+	private void rehash(int capacity) {
+		int[] replacement = new int[capacity];
+		int mask = capacity - 1;
+		for (int i = 0; i < this.size; i++) {
+			int hash = this.hashes[i] ^ (this.hashes[i] >>> 16);
+			int position = hash & mask;
+			while (replacement[position] != 0) {
+				position = (position + 1) & mask;
+			}
+			replacement[position] = i + 1;
+		}
+		this.hashIndex = replacement;
 	}
 
 	@Override
 	public boolean hasNext() {
 		this.inUse = true;
-		freezeIterators();
-		Iterator<E>[] children = this.traversal;
-		if (children != null) {
-			for (Iterator<E> iterator : children) {
-				if (iterator.hasNext()) {
-					return true;
-				}
-			}
-		}
-		else {
-			Set<Iterator<E>> pending = this.iterators;
-			Assert.state(pending != null, "Iterator registration is closed");
-			for (Iterator<E> iterator : pending) {
-				if (iterator.hasNext()) {
-					return true;
-				}
+		for (int i = 0; i < this.size; i++) {
+			if (iteratorAt(i).hasNext()) {
+				return true;
 			}
 		}
 		return false;
@@ -103,44 +174,22 @@ public class CompositeIterator<E extends @Nullable Object> implements Iterator<E
 	@Override
 	public E next() {
 		this.inUse = true;
-		freezeIterators();
-		Iterator<E>[] children = this.traversal;
-		if (children != null) {
-			for (Iterator<E> iterator : children) {
-				if (iterator.hasNext()) {
-					return iterator.next();
-				}
-			}
-		}
-		else {
-			Set<Iterator<E>> pending = this.iterators;
-			Assert.state(pending != null, "Iterator registration is closed");
-			for (Iterator<E> iterator : pending) {
-				if (iterator.hasNext()) {
-					return iterator.next();
-				}
+		for (int i = 0; i < this.size; i++) {
+			Iterator<E> iterator = iteratorAt(i);
+			if (iterator.hasNext()) {
+				return iterator.next();
 			}
 		}
 		throw new NoSuchElementException("All iterators exhausted");
 	}
 
-	/**
-	 * Retain the original set while a hash or equality callback can reenter add.
-	 * Release its nodes once registration is closed and all additions have returned.
-	 */
 	@SuppressWarnings("unchecked")
-	private void freezeIterators() {
-		Set<Iterator<E>> pending = this.iterators;
-		if (this.inUse && this.additions == 0 && this.traversal == null) {
-			this.traversal = (pending != null ? pending.toArray(Iterator[]::new) :
-					(Iterator<E>[]) EMPTY_ITERATORS);
-			this.iterators = null;
-		}
+	private Iterator<E> iteratorAt(int index) {
+		return (Iterator<E>) this.iterators[index];
 	}
 
 	@Override
 	public void remove() {
 		throw new UnsupportedOperationException("CompositeIterator does not support remove()");
 	}
-
 }
