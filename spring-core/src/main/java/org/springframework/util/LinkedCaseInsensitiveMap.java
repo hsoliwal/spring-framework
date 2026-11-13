@@ -457,6 +457,14 @@ public class LinkedCaseInsensitiveMap<V extends @Nullable Object> implements Map
 				return false;
 			}
 			Object key = entry.getKey();
+			// Exact base-class keys can reuse the result of a single locale conversion.
+			// Subclasses retain the containsKey/get hooks and their call ordering.
+			if (LinkedCaseInsensitiveMap.this.getClass() == LinkedCaseInsensitiveMap.class
+					&& key instanceof String string) {
+				String originalKey = caseInsensitiveKeys.get(convertKey(string));
+				return originalKey != null &&
+						ObjectUtils.nullSafeEquals(targetMap.get(originalKey), entry.getValue());
+			}
 			if (!LinkedCaseInsensitiveMap.this.containsKey(key)) {
 				return false;
 			}
