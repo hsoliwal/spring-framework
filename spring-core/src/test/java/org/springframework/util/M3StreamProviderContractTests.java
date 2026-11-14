@@ -17,13 +17,6 @@
 // SPDX-FileCopyrightText: 2026 Hitesh Soliwal and contributors
 // SPDX-License-Identifier: Apache-2.0
 
- */
-
-/*
- * Copyright 2026 Hitesh Soliwal and contributors.
- * SPDX-License-Identifier: Apache-2.0
- */
-
 package org.springframework.util;
 
 import java.util.ArrayList;
