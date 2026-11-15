@@ -14,6 +14,9 @@
  * limitations under the License.
  */
 
+// Modified 2026-11-15 by Hitesh Soliwal and Contributors to the Synexia Project:
+// compare private singleton value projections without materializing them.
+
 package org.springframework.util;
 
 import java.io.Serializable;
@@ -24,6 +27,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
+import java.util.ListIterator;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.BiConsumer;
@@ -248,22 +252,27 @@ final class SingleToMultiValueMapAdapter<K, V> implements MultiValueMap<K, V>, S
 			try {
 				for (Entry<K, V> e : entrySetView().targetEntries) {
 					K key = e.getKey();
-					List<V> values = Collections.singletonList(e.getValue());
-					if (values == null) {
-						if (otherMap.get(key) != null || !otherMap.containsKey(key)) {
-							return false;
-						}
-					}
-					else {
-						if (!values.equals(otherMap.get(key))) {
-							return false;
-						}
+					V value = e.getValue();
+					if (!equalsSingleValue(value, otherMap.get(key))) {
+						return false;
 					}
 				}
 				return true;
 			}
 			catch (ClassCastException | NullPointerException ignored) {
 				// fall through
+			}
+		}
+		return false;
+	}
+
+	/** Compare a singleton value projection without exposing or allocating it. */
+	private static boolean equalsSingleValue(@Nullable Object value, @Nullable Object other) {
+		if (other instanceof List<?> list) {
+			ListIterator<?> iterator = list.listIterator();
+			if (iterator.hasNext()) {
+				@Nullable Object candidate = iterator.next();
+				return (value != null ? value.equals(candidate) : candidate == null) && !iterator.hasNext();
 			}
 		}
 		return false;
