@@ -183,12 +183,59 @@ class ServerHttpObservationFilterTests {
 	}
 
 	@Test
+	void shouldNotCloseObservationOnAsyncTimeout() throws Exception {
+		this.request.setAsyncSupported(true);
+		this.request.startAsync();
+		this.filter.doFilter(this.request, this.response, this.mockFilterChain);
+		MockAsyncContext asyncContext = (MockAsyncContext) this.request.getAsyncContext();
+		for (AsyncListener listener : asyncContext.getListeners()) {
+			listener.onTimeout(new AsyncEvent(asyncContext));
+		}
+		assertThat(this.observationRegistry).hasObservationWithNameEqualTo("http.server.requests").that()
+				.isNotStopped();
+
+		// error dispatch sets the final status before the container completes the request
+		this.response.setStatus(503);
+		asyncContext.complete();
+		assertThatHttpObservation().hasLowCardinalityKeyValue("status", "503").hasBeenStopped();
+	}
+
+	@Test
 	void shouldNotCloseObservationDuringAsyncDispatch() throws Exception {
 		this.mockFilterChain = new MockFilterChain(new ScopeCheckingServlet(this.observationRegistry));
 		this.request.setDispatcherType(DispatcherType.ASYNC);
 		this.filter.doFilter(this.request, this.response, this.mockFilterChain);
 		assertThat(this.observationRegistry).hasObservationWithNameEqualTo("http.server.requests").that()
 				.isNotStopped();
+	}
+
+	@Test
+	void recordHandledExceptionShouldMarkObservationAsFailed() throws Exception {
+		IllegalStateException handled = new IllegalStateException("handled");
+		this.mockFilterChain = new MockFilterChain(new HandledExceptionServlet(handled));
+		this.filter.doFilter(this.request, this.response, this.mockFilterChain);
+
+		assertThatHttpObservation().hasError(handled)
+				.hasLowCardinalityKeyValue("exception", "IllegalStateException");
+	}
+
+	@Test
+	void recordHandledExceptionShouldMarkObservationAsFailedAfterAsyncCompletion() throws Exception {
+		IllegalStateException handled = new IllegalStateException("handled");
+		this.request.setAsyncSupported(true);
+		this.request.startAsync();
+		this.filter.doFilter(this.request, this.response, this.mockFilterChain);
+		ServerHttpObservationFilter.recordHandledException(this.request, handled);
+		this.request.getAsyncContext().complete();
+
+		assertThatHttpObservation().hasError(handled).hasBeenStopped();
+	}
+
+	@Test
+	void recordHandledExceptionShouldBeNoOpWithoutObservation() {
+		ServerHttpObservationFilter.recordHandledException(this.request, new IllegalStateException());
+
+		assertThat(this.request.getAttributeNames().hasMoreElements()).isFalse();
 	}
 
 	private TestObservationRegistryAssert.TestObservationRegistryAssertReturningObservationContextAssert assertThatHttpObservation() {
@@ -225,6 +272,22 @@ class ServerHttpObservationFilterTests {
 			Assert.notNull(request, "request must not be null");
 			Assert.notNull(response, "response must not be null");
 			response.setHeader("X-Trace-Id", "badc0ff33");
+		}
+
+	}
+
+	@SuppressWarnings("serial")
+	static class HandledExceptionServlet extends HttpServlet {
+
+		private final Throwable error;
+
+		HandledExceptionServlet(Throwable error) {
+			this.error = error;
+		}
+
+		@Override
+		protected void doGet(HttpServletRequest req, HttpServletResponse resp) {
+			ServerHttpObservationFilter.recordHandledException(req, this.error);
 		}
 
 	}

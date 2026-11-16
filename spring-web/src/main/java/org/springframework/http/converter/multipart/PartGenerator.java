@@ -32,8 +32,6 @@ import org.apache.commons.logging.LogFactory;
 
 import org.springframework.core.io.buffer.DataBuffer;
 import org.springframework.core.io.buffer.DataBuffers;
-import org.springframework.core.io.buffer.DefaultDataBuffer;
-import org.springframework.core.io.buffer.DefaultDataBufferFactory;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.converter.HttpMessageConversionException;
@@ -322,6 +320,12 @@ final class PartGenerator implements MultipartParser.PartListener {
 		}
 
 		private void switchToFile(DataBuffer current, boolean last) {
+			if (PartGenerator.this.maxDiskUsagePerPart != -1 &&
+					this.byteCount > PartGenerator.this.maxDiskUsagePerPart) {
+				DataBuffers.release(current);
+				throw new HttpMessageConversionException("Part exceeded " +
+						"the disk usage limit of " + PartGenerator.this.maxDiskUsagePerPart + " bytes");
+			}
 			FileState fileState = new FileState(this.headers, PartGenerator.this.fileStorageDirectory);
 			this.content.forEach(buffer -> fileState.onBody(buffer, false));
 			fileState.onBody(current, last);
@@ -338,8 +342,7 @@ final class PartGenerator implements MultipartParser.PartListener {
 				DataBuffers.release(buffer);
 			}
 			this.content.clear();
-			DefaultDataBuffer content = DefaultDataBufferFactory.sharedInstance.wrap(bytes);
-			Part part = DefaultParts.part(this.headers, content);
+			Part part = DefaultParts.part(this.headers, bytes);
 			PartGenerator.this.addPart(part);
 		}
 
@@ -403,6 +406,7 @@ final class PartGenerator implements MultipartParser.PartListener {
 		public void onBody(DataBuffer dataBuffer, boolean last) {
 			this.byteCount += dataBuffer.readableByteCount();
 			if (isMaxDiskUsagePerPartExceeded()) {
+				DataBuffers.release(dataBuffer);
 				closeOutputStream();
 				throw new HttpMessageConversionException("Part exceeded " +
 						"the disk usage limit of " + PartGenerator.this.maxDiskUsagePerPart + " bytes");

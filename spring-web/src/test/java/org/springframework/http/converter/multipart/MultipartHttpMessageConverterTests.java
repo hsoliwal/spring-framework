@@ -21,10 +21,13 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.StringReader;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Predicate;
+import java.util.stream.Stream;
 
 import javax.xml.transform.Source;
 import javax.xml.transform.stream.StreamSource;
@@ -36,6 +39,9 @@ import org.apache.tomcat.util.http.fileupload.UploadContext;
 import org.apache.tomcat.util.http.fileupload.disk.DiskFileItemFactory;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import org.springframework.core.ResolvableType;
 import org.springframework.core.io.ClassPathResource;
@@ -239,6 +245,22 @@ class MultipartHttpMessageConverterTests {
 			assertThat(result).containsOnlyKeys("file2");
 		}
 
+		@ParameterizedTest
+		@ValueSource(ints = {256 * 1024, 1})
+		void readMultipartFileContentMoreThanOnce(int maxInMemorySize, @TempDir Path tempDir) throws Exception {
+			MockHttpInputMessage response = createMultipartResponse("files.multipart", "----WebKitFormBoundaryG8fJ50opQOML0oGD");
+			converter.setMaxInMemorySize(maxInMemorySize);
+			MultiValueMap<String, Part> result = converter.read(ResolvableType.forClassWithGenerics(MultiValueMap.class, String.class, Part.class), response, null);
+
+			String expected = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer iaculis metus id vestibulum nullam.";
+			FilePart filePart = (FilePart) result.getFirst("file2");
+			assertThat(readContent(filePart)).isEqualTo(expected);
+			assertThat(readContent(filePart)).isEqualTo(expected);
+			Path dest = tempDir.resolve("a.txt");
+			filePart.transferTo(dest);
+			assertThat(dest).hasContent(expected);
+		}
+
 		@Test
 		void readMultipartMaxInMemoryExceeded() throws Exception {
 			MockHttpInputMessage response = createMultipartResponse("firefox.multipart", "---------------------------18399284482060392383840973206");
@@ -268,6 +290,30 @@ class MultipartHttpMessageConverterTests {
 		}
 
 		@Test
+		void readMultipartMaxDiskUsageExceededOnSwitchToFile(@TempDir Path tempDir) throws Exception {
+			PartGenerator partGenerator = new PartGenerator(100, 200, -1, tempDir);
+			assertThatThrownBy(() -> MultipartParser.parse(createStream("large-file.multipart"),
+					"B".getBytes(StandardCharsets.US_ASCII), StandardCharsets.UTF_8, 10 * 1024, 2 * 1024, partGenerator))
+					.isInstanceOf(HttpMessageConversionException.class)
+					.hasMessage("Part exceeded the disk usage limit of 200 bytes");
+			try (Stream<Path> files = Files.list(tempDir)) {
+				assertThat(files).isEmpty();
+			}
+		}
+
+		@Test
+		void readMultipartMaxDiskUsageExceededAfterSwitchToFile(@TempDir Path tempDir) throws Exception {
+			PartGenerator partGenerator = new PartGenerator(100, 2100, -1, tempDir);
+			assertThatThrownBy(() -> MultipartParser.parse(createStream("large-file.multipart"),
+					"B".getBytes(StandardCharsets.US_ASCII), StandardCharsets.UTF_8, 10 * 1024, 2 * 1024, partGenerator))
+					.isInstanceOf(HttpMessageConversionException.class)
+					.hasMessage("Part exceeded the disk usage limit of 2100 bytes");
+			try (Stream<Path> files = Files.list(tempDir)) {
+				assertThat(files).isEmpty();
+			}
+		}
+
+		@Test
 		void readMultipartUnnamedPart() throws Exception {
 			MockHttpInputMessage response = createMultipartResponse("simple.multipart", "simple-boundary");
 			assertThatThrownBy(() -> converter.read(ResolvableType.forClassWithGenerics(MultiValueMap.class, String.class, Part.class), response, null))
@@ -286,6 +332,12 @@ class MultipartHttpMessageConverterTests {
 		private InputStream createStream(String fileName) throws IOException {
 			Resource resource = new ClassPathResource("/org/springframework/http/multipart/" + fileName);
 			return resource.getInputStream();
+		}
+
+		private String readContent(Part part) throws IOException {
+			try (InputStream content = part.content()) {
+				return new String(content.readAllBytes(), UTF_8);
+			}
 		}
 
 		private Predicate<Part> isFilePart(String fileName) {

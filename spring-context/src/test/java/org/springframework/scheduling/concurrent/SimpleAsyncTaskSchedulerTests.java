@@ -16,6 +16,7 @@
 
 package org.springframework.scheduling.concurrent;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Date;
 import java.util.concurrent.CountDownLatch;
@@ -140,6 +141,54 @@ class SimpleAsyncTaskSchedulerTests extends AbstractSchedulingTaskExecutorTests 
 		Object result = future.get(1000, TimeUnit.MILLISECONDS);
 		await(errorHandler);
 		assertThat(result).isNull();
+		assertThat(errorHandler.lastError).isNotNull();
+		assertThat(taskRun.get()).isTrue();
+	}
+
+	@Test
+	void scheduleFixedRateTask() throws Exception {
+		TestTask task = new TestTask(this.testName, 1);
+		Future<?> future = scheduler.scheduleAtFixedRate(task, Duration.ofSeconds(1));
+		Thread.sleep(100);
+		future.cancel(true);
+		await(task);
+		assertThat(taskRun.get()).isTrue();
+		assertThreadNamePrefix(task);
+	}
+
+	@Test
+	void scheduleFixedRateTaskWithErrorHandler() throws Exception {
+		TestTask task = new TestTask(this.testName, 0);
+		TestErrorHandler errorHandler = new TestErrorHandler(1);
+		scheduler.setErrorHandler(errorHandler);
+		Future<?> future = scheduler.scheduleAtFixedRate(task, Duration.ofSeconds(1));
+		Thread.sleep(100);
+		future.cancel(true);
+		await(errorHandler);
+		assertThat(errorHandler.lastError).isNotNull();
+		assertThat(taskRun.get()).isTrue();
+	}
+
+	@Test
+	void scheduleFixedDelayTask() throws Exception {
+		TestTask task = new TestTask(this.testName, 1);
+		Future<?> future = scheduler.scheduleWithFixedDelay(task, Duration.ofSeconds(1));
+		Thread.sleep(100);
+		future.cancel(true);
+		await(task);
+		assertThat(taskRun.get()).isTrue();
+		assertThreadNamePrefix(task);
+	}
+
+	@Test
+	void scheduleFixedDelayTaskWithErrorHandler() throws Exception {
+		TestTask task = new TestTask(this.testName, 0);
+		TestErrorHandler errorHandler = new TestErrorHandler(1);
+		scheduler.setErrorHandler(errorHandler);
+		Future<?> future = scheduler.scheduleWithFixedDelay(task, Duration.ofSeconds(1));
+		Thread.sleep(100);
+		future.cancel(true);
+		await(errorHandler);
 		assertThat(errorHandler.lastError).isNotNull();
 		assertThat(taskRun.get()).isTrue();
 	}

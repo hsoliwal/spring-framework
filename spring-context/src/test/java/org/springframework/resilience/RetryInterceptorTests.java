@@ -25,6 +25,7 @@ import java.time.Duration;
 import java.util.Properties;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.aopalliance.intercept.MethodInterceptor;
@@ -120,6 +121,16 @@ class RetryInterceptorTests {
 	}
 
 	@Test
+	void withPostProcessorForMethodWithTimeUnit() {
+		DefaultListableBeanFactory bf = createBeanFactoryFor(TimeUnitAnnotatedBean.class);
+		TimeUnitAnnotatedBean proxy = bf.getBean(TimeUnitAnnotatedBean.class);
+
+		assertThat(proxy.secondsOperation()).isEqualTo("seconds");
+		assertThat(proxy.minutesOperation()).isEqualTo("minutes");
+		assertThat(proxy.explicitMaxDelayOperation()).isEqualTo("explicit");
+	}
+
+	@Test
 	void withPostProcessorForMethodWithInterface() {
 		DefaultListableBeanFactory bf = createBeanFactoryFor(AnnotatedMethodBeanWithInterface.class);
 		AnnotatedInterface proxy = bf.getBean(AnnotatedInterface.class);
@@ -177,6 +188,33 @@ class RetryInterceptorTests {
 		AnnotatedMethodBeanWithInterface target = (AnnotatedMethodBeanWithInterface) AopProxyUtils.getSingletonTarget(proxy);
 
 		assertThat(AopUtils.isJdkDynamicProxy(proxy)).isTrue();
+		assertThatIOException().isThrownBy(proxy::retryOperation).withMessage("6");
+		assertThat(target.counter).isEqualTo(6);
+	}
+
+	@Test  // gh-37611
+	void withPostProcessorForMethodWithPlainInterface() {
+		DefaultListableBeanFactory bf = createBeanFactoryFor(AnnotatedMethodBeanWithPlainInterface.class);
+		PlainInterface proxy = bf.getBean(PlainInterface.class);
+		AnnotatedMethodBeanWithPlainInterface target = (AnnotatedMethodBeanWithPlainInterface) AopProxyUtils.getSingletonTarget(proxy);
+
+		assertThat(AopUtils.isJdkDynamicProxy(proxy)).isTrue();
+		assertThatIOException().isThrownBy(proxy::retryOperation).withMessage("6");
+		assertThat(target.counter).isEqualTo(6);
+	}
+
+	@Test  // gh-37611
+	void withPostProcessorForMethodWithPlainInterfaceAndDefaultTargetClass() {
+		DefaultListableBeanFactory bf = new DefaultListableBeanFactory();
+		AopConfigUtils.forceAutoProxyCreatorToUseClassProxying(bf);
+		bf.registerBeanDefinition("bean", new RootBeanDefinition(AnnotatedMethodBeanWithPlainInterface.class));
+		RetryAnnotationBeanPostProcessor bpp = new RetryAnnotationBeanPostProcessor();
+		bpp.setBeanFactory(bf);
+		bf.addBeanPostProcessor(bpp);
+		PlainInterface proxy = bf.getBean(PlainInterface.class);
+		AnnotatedMethodBeanWithPlainInterface target = (AnnotatedMethodBeanWithPlainInterface) AopProxyUtils.getSingletonTarget(proxy);
+
+		assertThat(AopUtils.isCglibProxy(proxy)).isTrue();
 		assertThatIOException().isThrownBy(proxy::retryOperation).withMessage("6");
 		assertThat(target.counter).isEqualTo(6);
 	}
@@ -546,6 +584,25 @@ class RetryInterceptorTests {
 	}
 
 
+	static class TimeUnitAnnotatedBean {
+
+		@Retryable(delay = 1, timeUnit = TimeUnit.SECONDS)
+		public String secondsOperation() {
+			return "seconds";
+		}
+
+		@Retryable(delay = 1, timeUnit = TimeUnit.MINUTES)
+		public String minutesOperation() {
+			return "minutes";
+		}
+
+		@Retryable(delay = 1, maxDelay = Long.MAX_VALUE / 2, timeUnit = TimeUnit.SECONDS)
+		public String explicitMaxDelayOperation() {
+			return "explicit";
+		}
+	}
+
+
 	static class AnnotatedMethodBeanWithInterface implements AnnotatedInterface {
 
 		int counter = 0;
@@ -562,6 +619,19 @@ class RetryInterceptorTests {
 
 		@Retryable(maxRetries = 5, delay = 10)
 		void retryOperation() throws IOException;
+	}
+
+
+	static class AnnotatedMethodBeanWithPlainInterface implements PlainInterface {
+
+		int counter = 0;
+
+		@Override
+		@Retryable(maxRetries = 5, delay = 10)
+		public void retryOperation() throws IOException {
+			counter++;
+			throw new IOException(Integer.toString(counter));
+		}
 	}
 
 
