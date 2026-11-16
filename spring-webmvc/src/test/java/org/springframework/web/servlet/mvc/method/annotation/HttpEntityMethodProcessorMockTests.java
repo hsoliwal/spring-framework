@@ -79,6 +79,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 import static org.springframework.http.MediaType.APPLICATION_OCTET_STREAM;
 import static org.springframework.http.MediaType.APPLICATION_PROBLEM_JSON;
 import static org.springframework.http.MediaType.APPLICATION_PROBLEM_JSON_VALUE;
@@ -655,6 +656,48 @@ class HttpEntityMethodProcessorMockTests {
 		then(resourceRegionMessageConverter).should(times(1)).write(
 				anyCollection(), eq(APPLICATION_OCTET_STREAM),
 				argThat(outputMessage -> "bytes".equals(outputMessage.getHeaders().getFirst(HttpHeaders.ACCEPT_RANGES))));
+		assertThat(servletResponse.getStatus()).isEqualTo(206);
+	}
+
+	@Test
+	void shouldIgnoreResourceByteRangeWhenIfRangeETagDoesNotMatch() throws Exception {
+		ByteArrayResource resource = new ByteArrayResource("Content".getBytes(StandardCharsets.UTF_8));
+		ResponseEntity<Resource> returnValue = ResponseEntity.ok().eTag("\"current\"").body(resource);
+		servletRequest.addHeader(HttpHeaders.RANGE, "bytes=0-5");
+		servletRequest.addHeader(HttpHeaders.IF_RANGE, "\"stale\"");
+
+		when(resourceMessageConverter.canWrite(ByteArrayResource.class, null)).thenReturn(true);
+		when(resourceMessageConverter.getSupportedMediaTypes(any()))
+				.thenReturn(Collections.singletonList(MediaType.ALL));
+		when(resourceMessageConverter.canWrite(ByteArrayResource.class, APPLICATION_OCTET_STREAM))
+				.thenReturn(true);
+
+		processor.handleReturnValue(
+				returnValue, returnTypeResponseEntityResource, mavContainer, webRequest);
+
+		verify(resourceMessageConverter).write(
+				isA(ByteArrayResource.class), eq(APPLICATION_OCTET_STREAM), any(HttpOutputMessage.class));
+		verify(resourceRegionMessageConverter, never()).write(anyCollection(), any(), any());
+		assertThat(servletResponse.getStatus()).isEqualTo(200);
+		assertThat(servletResponse.getHeader(HttpHeaders.CONTENT_RANGE)).isNull();
+	}
+
+	@Test
+	void shouldHandleResourceByteRangeWhenIfRangeETagMatches() throws Exception {
+		ResponseEntity<Resource> returnValue = ResponseEntity.ok().eTag("\"current\"")
+				.body(new ByteArrayResource("Content".getBytes(StandardCharsets.UTF_8)));
+		servletRequest.addHeader(HttpHeaders.RANGE, "bytes=0-5");
+		servletRequest.addHeader(HttpHeaders.IF_RANGE, "\"current\"");
+
+		when(resourceRegionMessageConverter.canWrite(any(), eq(null))).thenReturn(true);
+		when(resourceRegionMessageConverter.canWrite(any(), eq(APPLICATION_OCTET_STREAM)))
+				.thenReturn(true);
+
+		processor.handleReturnValue(
+				returnValue, returnTypeResponseEntityResource, mavContainer, webRequest);
+
+		verify(resourceRegionMessageConverter).write(
+				anyCollection(), eq(APPLICATION_OCTET_STREAM), any(HttpOutputMessage.class));
 		assertThat(servletResponse.getStatus()).isEqualTo(206);
 	}
 

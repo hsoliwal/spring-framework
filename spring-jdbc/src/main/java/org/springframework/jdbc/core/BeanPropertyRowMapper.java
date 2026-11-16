@@ -42,6 +42,7 @@ import org.springframework.dao.DataRetrievalFailureException;
 import org.springframework.dao.InvalidDataAccessApiUsageException;
 import org.springframework.jdbc.support.JdbcUtils;
 import org.springframework.util.Assert;
+import org.springframework.util.CollectionUtils;
 import org.springframework.util.StringUtils;
 
 /**
@@ -265,6 +266,18 @@ public class BeanPropertyRowMapper<T> implements RowMapper<T> {
 			this.mappedProperties.remove(lowerCaseName(propertyName));
 			this.mappedProperties.remove(underscoreName(propertyName));
 		}
+		if (this.mappedPropertyNames != null) {
+			this.mappedPropertyNames.remove(propertyName);
+		}
+	}
+
+	/**
+	 * Determine whether there are any mapped properties to check.
+	 * @since 7.1
+	 */
+	protected boolean hasMappedProperties() {
+		return (!CollectionUtils.isEmpty(this.mappedProperties) ||
+				(isCheckFullyPopulated() && !CollectionUtils.isEmpty(this.mappedPropertyNames)));
 	}
 
 	/**
@@ -324,10 +337,14 @@ public class BeanPropertyRowMapper<T> implements RowMapper<T> {
 	public T mapRow(ResultSet rs, int rowNumber) throws SQLException {
 		BeanWrapperImpl bw = new BeanWrapperImpl();
 		initBeanWrapper(bw);
-
 		T mappedObject = constructMappedInstance(rs, bw);
-		bw.setBeanInstance(mappedObject);
 
+		if (!hasMappedProperties()) {
+			// Nothing left to populate via setters (for example, a record mapped through its constructor)
+			return mappedObject;
+		}
+
+		bw.setBeanInstance(mappedObject);
 		ResultSetMetaData rsmd = rs.getMetaData();
 		int columnCount = rsmd.getColumnCount();
 		Set<String> populatedProperties = (isCheckFullyPopulated() ? new HashSet<>() : null);

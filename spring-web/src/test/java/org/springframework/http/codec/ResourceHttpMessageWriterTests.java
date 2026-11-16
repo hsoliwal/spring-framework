@@ -109,6 +109,19 @@ class ResourceHttpMessageWriterTests {
 	}
 
 	@Test
+	void ignoreRangeWhenIfRangeETagDoesNotMatch() {
+		this.response.getHeaders().setETag("\"current\"");
+
+		testWrite(get("/").range(of(0, 5)).header(HttpHeaders.IF_RANGE, "\"stale\"").build());
+
+		assertThat(this.response.getHeaders().getFirst(HttpHeaders.CONTENT_RANGE)).isNull();
+		StepVerifier.create(this.response.getBodyAsString())
+				.expectNext("Spring Framework test resource content.")
+				.expectComplete()
+				.verify();
+	}
+
+	@Test
 	void writeMultipleRegions() {
 
 		testWrite(get("/").range(of(0,5), of(7,15), of(17,20), of(22,38)).build());

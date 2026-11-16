@@ -22,6 +22,7 @@ import java.util.Map;
 
 import org.junit.jupiter.api.Test;
 
+import org.springframework.beans.ConfigurablePropertyAccessor;
 import org.springframework.beans.InvalidPropertyException;
 import org.springframework.beans.InvalidPropertyPathException;
 import org.springframework.beans.MutablePropertyValues;
@@ -33,6 +34,7 @@ import org.springframework.tests.sample.beans.FieldAccessBean;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
+import static org.mockito.Mockito.mock;
 
 /**
  * @author Juergen Hoeller
@@ -175,10 +177,29 @@ class DataBinderFieldAccessTests {
 		MutablePropertyValues tooDeep = new MutablePropertyValues();
 		tooDeep.add("spouse.spouse.spouse.name", "Joe");
 		binder.bind(tooDeep);
-		assertThat(binder.getBindingResult().getFieldErrors("spouse.spouse.spouse.name")).singleElement().satisfies(error -> {
-			assertThat(error.getCode()).isEqualTo(InvalidPropertyPathException.ERROR_CODE);
-			assertThat(error.getRejectedValue()).isEqualTo("Joe");
-		});
+		assertThat(kerry.getName()).isEqualTo("kerry");
+		assertThat(binder.getBindingResult().hasErrors()).isFalse();
+
+		binder.setIgnoreUnknownFields(false);
+		MutablePropertyValues tooDeepAgain = new MutablePropertyValues();
+		tooDeepAgain.add("spouse.spouse.spouse.name", "Joe");
+		assertThatExceptionOfType(NotWritablePropertyException.class)
+				.isThrownBy(() -> binder.bind(tooDeepAgain))
+				.withCauseInstanceOf(InvalidPropertyPathException.class);
+		assertThat(kerry.getName()).isEqualTo("kerry");
+	}
+
+	@Test
+	@SuppressWarnings("serial")
+	void customDirectFieldAccessor() {
+		ConfigurablePropertyAccessor accessor = mock(ConfigurablePropertyAccessor.class);
+		DirectFieldBindingResult result = new DirectFieldBindingResult(new FieldAccessForm(), "form", true, 10) {
+			@Override
+			protected ConfigurablePropertyAccessor createDirectFieldAccessor() {
+				return accessor;
+			}
+		};
+		assertThat(result.getPropertyAccessor()).isSameAs(accessor);
 	}
 
 	@Test
