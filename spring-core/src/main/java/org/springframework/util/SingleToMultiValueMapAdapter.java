@@ -29,6 +29,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.ListIterator;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.function.BiConsumer;
 
@@ -280,7 +281,7 @@ final class SingleToMultiValueMapAdapter<K, V> implements MultiValueMap<K, V>, S
 
 	@Override
 	public int hashCode() {
-		return this.targetMap.hashCode();
+		return entrySetView().hashCode();
 	}
 
 	@Override
@@ -312,6 +313,18 @@ final class SingleToMultiValueMapAdapter<K, V> implements MultiValueMap<K, V>, S
 					return new AbstractMap.SimpleImmutableEntry<>(entry.getKey(), Collections.singletonList(entry.getValue()));
 				}
 			};
+		}
+
+		@Override
+		public int hashCode() {
+			int hashCode = 0;
+			for (Entry<K, V> entry : this.targetEntries) {
+				K key = entry.getKey();
+				V value = entry.getValue();
+				// A singleton list hashes to 31 plus the hash of its element.
+				hashCode += Objects.hashCode(key) ^ (31 + Objects.hashCode(value));
+			}
+			return hashCode;
 		}
 
 		@Override

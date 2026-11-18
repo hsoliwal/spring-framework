@@ -25,6 +25,7 @@ import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.function.BiConsumer;
 
@@ -225,7 +226,7 @@ final class MultiToSingleValueMapAdapter<K, V> implements Map<K, V>, Serializabl
 
 	@Override
 	public int hashCode() {
-		return this.targetMap.hashCode();
+		return entrySetView().hashCode(true);
 	}
 
 	@Override
@@ -257,6 +258,23 @@ final class MultiToSingleValueMapAdapter<K, V> implements Map<K, V>, Serializabl
 					return new AbstractMap.SimpleImmutableEntry<>(entry.getKey(), entry.getValue().get(0));
 				}
 			};
+		}
+
+		@Override
+		public int hashCode() {
+			return hashCode(false);
+		}
+
+		private int hashCode(boolean allowEmptyValues) {
+			int hashCode = 0;
+			for (Entry<K, List<V>> entry : this.targetEntries) {
+				K key = entry.getKey();
+				List<V> values = entry.getValue();
+				// Map.get tolerates absent first values; the entry projection uses get(0).
+				@Nullable V value = (allowEmptyValues ? adaptValue(values) : values.get(0));
+				hashCode += Objects.hashCode(key) ^ Objects.hashCode(value);
+			}
+			return hashCode;
 		}
 
 		@Override
