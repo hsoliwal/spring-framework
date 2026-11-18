@@ -27,6 +27,11 @@ This rule overrides any older text in this file.
 
 Concise extract of [CONTRIBUTING.md](CONTRIBUTING.md), which remains the reference for humans.
 
+
+## Priority 0 — additive API superset, historical loss checks and last-checked anchors (2026-11-18)
+
+Before source promotion and merges, preserve all applicable accepted upstream plus fork capabilities as one optimized **backward-compatible superset** (public API/ABI, expected behavior, fixes, tests, serializations, ordering, concurrency, native/resource contracts and prior measured optimizations). Compare and select the best *proven* algorithm from the incumbent, donors, old branches and PRs using correctness tests and performance/memory measurements; add APIs without silently discarding older features. Review Git history **from earliest reachable ancestors to all relevant heads**, old/merged/closed/reverted PRs, tags, merge bases, both parents and changes to deleted/renamed code to find bad commits, source loss and abandoned optimizations. Never rebase `develop`. Record last-checked date, ref/head SHA, scope, root coverage, PR/branch coverage, last full-verified anchor, loss findings, and PENDING/PARTIAL/VERIFIED/HOLD in canonical Synexia history ledger. HEAD observation does not certify an audit. Use existing Synexia Maven/OpenRewrite source-sealed recipes and target proof gates, respecting each repo's role. Default NEW separable Synexia-authored code to Apache-2.0 where permitted; retain all original upstream/donor licenses, NOTICE and attribution. Abstract algorithms are generally reusable ideas, but LLM translation/patternization does not itself relicense code. See [canonical Synexia PR #18764](https://github.com/hsoliwal/com.synexia/pull/18764) and its explicitly PENDING 236-repo registry.
+
 ## Build
 
 - Gradle build, JDK from `.sdkmanrc` (currently JDK 25, `sdk env install` / `sdk env`); artifacts target Java 17+.
